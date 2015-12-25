@@ -7,10 +7,12 @@
       "defaultValue": "West US",
       "allowedValues": [
         "East US",
+        "East US 2",
+        "South Central US",
         "West US",
-        "West Europe",
-        "East Asia",
-        "South East Asia"
+        "Central US",
+        "North Central US",
+        "West Europe"
       ],
       "metadata": {
         "description": "Location of deployment"
@@ -27,54 +29,23 @@
       "defaultValue": "Standard_LRS",
       "allowedValues": [
         "Standard_LRS",
-        "Standard_GRS"
+        "Standard_ZRS",
+        "Standard_GRS",
+        "Standard_RAGRS"
       ],
       "metadata": {
         "description": "Type of the storage account"
-      }
-    },
-    "publicIPAddressType": {
-      "type": "string",
-      "defaultValue": "dynamic",
-      "allowedValues": [
-        "dynamic"
-      ],
-      "metadata": {
-        "description": "Type of Public IP"
-      }
-    },
-    "imagePublisher": {
-      "type": "string",
-      "defaultValue": "",
-      "allowedValues": [
-        "MicrosoftWindowsServer",
-        "starwind"
-      ],
-      "metadata": {
-        "description": "Image Publisher"
-      }
-    },
-    "imageOffer": {
-      "type": "string",
-      "defaultValue": "",
-      "allowedValues": [
-        "WindowsServer",
-        "starwindvirtualsan"
-      ],
-      "metadata": {
-        "description": "Image Offer"
       }
     },
     "imageSKU": {
       "type": "string",
       "defaultValue": "",
       "allowedValues": [
-        "2012-R2-Datacenter",
         "starwindbyol",
         "starwindperhour"
       ],
       "metadata": {
-        "description": "Image SKU"
+        "description": "StarWind Image SKU"
       }
     },
     "vmSize": {
@@ -101,6 +72,16 @@
         "description": "Admin Password"
       }
     },
+    "publicIPAddressType": {
+      "type": "string",
+      "defaultValue": "dynamic",
+      "allowedValues": [
+        "dynamic"
+      ],
+      "metadata": {
+        "description": "Type of Public IP"
+      }
+    },
     "addressPrefix": {
       "type": "string",
       "defaultValue": "10.0.0.0/16",
@@ -122,15 +103,19 @@
         "description": "Subnet 2 address prefix in CIDR format"
       }
     }
+
   },
   "variables": {
+    "imagePublisher": "starwind",
+    "imageOffer": "starwindvirtualsan",
     "vmName": "vm",
+    "vmCount": 2,
     "subnet1Name": "subnet1",
     "subnet2Name": "subnet2",
     "virtualNetworkName": "virtualNetwork",
     "publicIPName": "publicIP",
-    "nic1Name": "nic1",
-    "nic2Name": "nic2",
+    "nic1Name": "node",
+    "nic2Name": "sync",
     "availabilitySetName": "availabilitySet1",
     "vnetID": "[resourceId('Microsoft.Network/virtualNetworks',variables('virtualNetworkName'))]",
     "subnet1Ref": "[concat(variables('vnetID'),'/subnets/',variables('subnet1Name'))]",
@@ -146,29 +131,26 @@
         "accountType": "[parameters('storageAccountType')]"
       }
     },
+
     {
       "type": "Microsoft.Compute/availabilitySets",
       "name": "[variables('availabilitySetName')]",
       "apiVersion": "2015-05-01-preview",
       "location": "[parameters('location')]",
       "properties": {
-        "platformFaultDomainCount": "2"
+        "platformFaultDomainCount": "[int('2')]"
       }
     },
     {
       "apiVersion": "2015-05-01-preview",
       "type": "Microsoft.Network/publicIPAddresses",
-      "name": "[concat(variables('publicIPName'), '0')]",
+      "name": "[concat(variables('publicIPName'), copyindex(1))]",
       "location": "[parameters('location')]",
-      "properties": {
-        "publicIPAllocationMethod": "[parameters('publicIPAddressType')]"
-      }
-    },
-    {
-      "apiVersion": "2015-05-01-preview",
-      "type": "Microsoft.Network/publicIPAddresses",
-      "name": "[concat(variables('publicIPName'), '1')]",
-      "location": "[parameters('location')]",
+      "copy": {
+        "name": "ipLoop",
+        "count": "[variables('vmCount')]"
+
+      },
       "properties": {
         "publicIPAllocationMethod": "[parameters('publicIPAddressType')]"
       }
@@ -203,10 +185,15 @@
     {
       "apiVersion": "2015-05-01-preview",
       "type": "Microsoft.Network/networkInterfaces",
-      "name": "[concat(variables('nic1Name'), '0')]",
+      "name": "[concat(variables('nic1Name'), copyindex(1))]",
       "location": "[parameters('location')]",
+      "copy": {
+        "name": "nicLoop",
+        "count": "[variables('vmCount')]"
+
+      },
       "dependsOn": [
-        "[concat('Microsoft.Network/publicIPAddresses/', variables('publicIPName'), '0')]",
+        "[concat('Microsoft.Network/publicIPAddresses/', variables('publicIPName'), copyindex(1))]",
         "[concat('Microsoft.Network/virtualNetworks/', variables('virtualNetworkName'))]"
       ],
       "properties": {
@@ -216,7 +203,7 @@
             "properties": {
               "privateIPAllocationMethod": "Dynamic",
               "publicIPAddress": {
-                "id": "[concat(resourceId('Microsoft.Network/publicIPAddresses',variables('publicIPName')), '0')]"
+                "id": "[concat(resourceId('Microsoft.Network/publicIPAddresses',variables('publicIPName')), copyindex(1))]"
               },
               "subnet": {
                 "id": "[variables('subnet1Ref')]"
@@ -229,59 +216,15 @@
     {
       "apiVersion": "2015-05-01-preview",
       "type": "Microsoft.Network/networkInterfaces",
-      "name": "[concat(variables('nic1Name'), '1')]",
+      "name": "[concat(variables('nic2Name'), copyindex(1))]",
       "location": "[parameters('location')]",
+      "copy": {
+        "name": "vmLoop",
+        "count": "[variables('vmCount')]"
+
+      },
       "dependsOn": [
-        "[concat('Microsoft.Network/publicIPAddresses/', variables('publicIPName'), '1')]",
-        "[concat('Microsoft.Network/virtualNetworks/', variables('virtualNetworkName'))]"
-      ],
-      "properties": {
-        "ipConfigurations": [
-          {
-            "name": "ipconfig1",
-            "properties": {
-              "privateIPAllocationMethod": "Dynamic",
-              "publicIPAddress": {
-                "id": "[concat(resourceId('Microsoft.Network/publicIPAddresses',variables('publicIPName')), '1')]"
-              },
-              "subnet": {
-                "id": "[variables('subnet1Ref')]"
-              }
-            }
-          }
-        ]
-      }
-    },
-    {
-      "apiVersion": "2015-05-01-preview",
-      "type": "Microsoft.Network/networkInterfaces",
-      "name": "[concat(variables('nic2Name'), '0')]",
-      "location": "[parameters('location')]",
-      "dependsOn": [
-        "[concat('Microsoft.Network/publicIPAddresses/', variables('publicIPName'), '0')]",
-        "[concat('Microsoft.Network/virtualNetworks/', variables('virtualNetworkName'))]"
-      ],
-      "properties": {
-        "ipConfigurations": [
-          {
-            "name": "ipconfig1",
-            "properties": {
-              "privateIPAllocationMethod": "Dynamic",
-              "subnet": {
-                "id": "[variables('subnet2Ref')]"
-              }
-            }
-          }
-        ]
-      }
-    },
-    {
-      "apiVersion": "2015-05-01-preview",
-      "type": "Microsoft.Network/networkInterfaces",
-      "name": "[concat(variables('nic2Name'), '1')]",
-      "location": "[parameters('location')]",
-      "dependsOn": [
-        "[concat('Microsoft.Network/publicIPAddresses/', variables('publicIPName'), '1')]",
+        "[concat('Microsoft.Network/publicIPAddresses/', variables('publicIPName'), copyindex(1))]",
         "[concat('Microsoft.Network/virtualNetworks/', variables('virtualNetworkName'))]"
       ],
       "properties": {
@@ -301,8 +244,12 @@
     {
       "apiVersion": "2015-06-15",
       "type": "Microsoft.Compute/virtualMachines",
-      "name": "[concat(variables('vmName'), '0')]",
+      "name": "[concat(variables('vmName'), copyindex(1))]",
       "location": "[parameters('location')]",
+      "copy": {
+        "name": "vmLoop",
+        "count": "[variables('vmCount')]"
+      },
       "plan": {
         "name": "[parameters('imageSKU')]",
         "publisher": "starwind",
@@ -310,8 +257,8 @@
       },
       "dependsOn": [
         "[concat('Microsoft.Storage/storageAccounts/', parameters('newStorageAccountName'))]",
-        "[concat('Microsoft.Network/networkInterfaces/', variables('nic1Name'), '0')]",
-        "[concat('Microsoft.Network/networkInterfaces/', variables('nic2Name'), '0')]",
+        "[concat('Microsoft.Network/networkInterfaces/', variables('nic1Name'), copyindex(1))]",
+        "[concat('Microsoft.Network/networkInterfaces/', variables('nic2Name'), copyindex(1))]",
         "[concat('Microsoft.Compute/availabilitySets/', variables('availabilitySetName'))]"
       ],
       "properties": {
@@ -328,15 +275,15 @@
         },
         "storageProfile": {
           "imageReference": {
-            "publisher": "[parameters('imagePublisher')]",
-            "offer": "[parameters('imageOffer')]",
+            "offer": "[variables('imageOffer')]",
+            "publisher": "[variables('imagePublisher')]",
             "sku": "[parameters('imageSKU')]",
             "version": "latest"
           },
           "osDisk": {
             "name": "osdisk",
             "vhd": {
-              "uri": "[concat('http://',parameters('newStorageAccountName'),'.blob.core.windows.net/vhds','0','/','osdisk.vhd')]"
+              "uri": "[concat('http://',parameters('newStorageAccountName'),'.blob.core.windows.net/vhds',copyindex(1),'/','osdisk.vhd')]"
             },
             "caching": "ReadWrite",
             "createOption": "FromImage"
@@ -348,81 +295,13 @@
               "properties": {
                 "primary": true
               },
-              "id": "[concat(resourceId('Microsoft.Network/networkInterfaces',variables('nic1Name')), '0')]"
+              "id": "[concat(resourceId('Microsoft.Network/networkInterfaces',variables('nic1Name')), copyindex(1))]"
             },
             {
               "properties": {
                 "primary": false
               },
-              "id": "[concat(resourceId('Microsoft.Network/networkInterfaces',variables('nic2Name')), '0')]"
-            }
-          ]
-        },
-        "diagnosticsProfile": {
-          "bootDiagnostics": {
-            "enabled": "true",
-            "storageUri": "[concat('http://',parameters('newStorageAccountName'),'.blob.core.windows.net')]"
-          }
-        }
-      }
-    },
-    {
-      "apiVersion": "2015-06-15",
-      "type": "Microsoft.Compute/virtualMachines",
-      "name": "[concat(variables('vmName'), '1')]",
-      "location": "[parameters('location')]",
-      "plan": {
-        "name": "[parameters('imageSKU')]",
-        "publisher": "starwind",
-        "product": "starwindvirtualsan"
-      },
-      "dependsOn": [
-        "[concat('Microsoft.Storage/storageAccounts/', parameters('newStorageAccountName'))]",
-        "[concat('Microsoft.Network/networkInterfaces/', variables('nic1Name'), '1')]",
-        "[concat('Microsoft.Network/networkInterfaces/', variables('nic2Name'), '1')]",
-        "[concat('Microsoft.Compute/availabilitySets/', variables('availabilitySetName'))]"
-      ],
-      "properties": {
-        "availabilitySet": {
-          "id": "[resourceId('Microsoft.Compute/availabilitySets', variables('availabilitySetName'))]"
-        },
-        "hardwareProfile": {
-          "vmSize": "[parameters('vmSize')]"
-        },
-        "osProfile": {
-          "computerName": "[variables('vmName')]",
-          "adminUsername": "[parameters('adminUsername')]",
-          "adminPassword": "[parameters('adminPassword')]"
-        },
-        "storageProfile": {
-          "imageReference": {
-            "publisher": "[parameters('imagePublisher')]",
-            "offer": "[parameters('imageOffer')]",
-            "sku": "[parameters('imageSKU')]",
-            "version": "latest"
-          },
-          "osDisk": {
-            "name": "osdisk",
-            "vhd": {
-              "uri": "[concat('http://',parameters('newStorageAccountName'),'.blob.core.windows.net/vhds','1','/','osdisk.vhd')]"
-            },
-            "caching": "ReadWrite",
-            "createOption": "FromImage"
-          }
-        },
-        "networkProfile": {
-          "networkInterfaces": [
-            {
-              "properties": {
-                "primary": true
-              },
-              "id": "[concat(resourceId('Microsoft.Network/networkInterfaces',variables('nic1Name')), '1')]"
-            },
-            {
-              "properties": {
-                "primary": false
-              },
-              "id": "[concat(resourceId('Microsoft.Network/networkInterfaces',variables('nic2Name')), '1')]"
+              "id": "[concat(resourceId('Microsoft.Network/networkInterfaces',variables('nic2Name')), copyindex(1))]"
             }
           ]
         },
